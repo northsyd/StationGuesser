@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Station Guesser</title>
+  <style>
+    :root{--bg:#07111f;--card:#101b2e;--card2:#13223a;--text:#eef5ff;--muted:#a9bad3;--accent:#63d2ff;--good:#7af0a0;--bad:#ff8080;--line:#243653}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(circle at top,#16345d 0,#07111f 45%,#040914 100%);color:var(--text);min-height:100vh}
+    .wrap{max-width:980px;margin:0 auto;padding:28px 16px 44px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}
+    h1{font-size:clamp(2rem,5vw,4rem);line-height:.95;margin:0;letter-spacing:-.05em}
+    .tag{color:var(--muted);margin-top:8px;font-size:1.05rem}
+    .pill{border:1px solid var(--line);background:rgba(255,255,255,.05);padding:10px 14px;border-radius:999px;color:var(--muted);white-space:nowrap}
+    .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025));border:1px solid var(--line);border-radius:24px;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.25);backdrop-filter:blur(8px)}
+    label{display:block;color:var(--muted);font-weight:650;font-size:.92rem;margin:0 0 8px}
+    .row{display:flex;gap:10px;align-items:center}
+    input,select,button{font:inherit;border-radius:14px;border:1px solid var(--line)}
+    input,select{width:100%;background:#081426;color:var(--text);padding:13px 14px;outline:none}
+    input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,210,255,.15)}
+    button{background:#19375f;color:var(--text);padding:13px 16px;cursor:pointer;font-weight:750;transition:.15s transform,.15s opacity,.15s background}
+    button:hover{transform:translateY(-1px);background:#245080}
+    button.secondary{background:#101b2e}
+    button.danger{background:#4a2230}
+    button.good{background:#1f5a38}
+    button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+    .status{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.035);color:var(--muted)}
+    .status strong{color:var(--text)}
+    .correct{border-color:rgba(122,240,160,.55);color:#d6ffe1}
+    .wrong{border-color:rgba(255,128,128,.55);color:#ffd9d9}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+    .stat{background:#081426;border:1px solid var(--line);border-radius:16px;padding:12px}
+    .stat b{display:block;font-size:1.4rem}
+    .stat span{color:var(--muted);font-size:.85rem}
+    ul{padding-left:18px;margin:10px 0 0}
+    li{margin:7px 0;color:var(--muted)}
+    .guess{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+    .guess:last-child{border-bottom:0}
+    .guess b{display:block}
+    .guess small{color:var(--muted)}
+    .km{text-align:right;font-weight:850}
+    .empty{color:var(--muted);margin:8px 0 0}
+    footer{color:var(--muted);font-size:.9rem;margin-top:18px;text-align:center}
+    @media(max-width:760px){header{display:block}.pill{display:inline-block;margin-top:14px}.grid{grid-template-columns:1fr}.row{display:block}.row button{width:100%;margin-top:10px}.stats{grid-template-columns:1fr 1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Station Guesser</h1>
+        <div class="tag">Guess the mystery NSW transport location. Wrong guesses show distance to the answer.</div>
+      </div>
+      <div class="pill"><span id="count">Loading</span> locations loaded</div>
+    </header>
+
+    <div class="grid">
+      <main class="card">
+        <label for="region">Region</label>
+        <select id="region">
+          <option value="any">Any available region</option>
+          <option value="nsw">NSW</option>
+          <option value="vic" disabled>VIC, add GeoJSON later</option>
+        </select>
+
+        <div style="height:14px"></div>
+        <label for="guess">Your guess</label>
+        <div class="row">
+          <input id="guess" list="station-list" placeholder="Start typing a location, e.g. Central" autocomplete="off" />
+          <datalist id="station-list"></datalist>
+          <button id="guessBtn">Guess</button>
+        </div>
+
+        <div class="actions">
+          <button id="hintBtn" class="secondary">Hint</button>
+          <button id="skipBtn" class="danger">Skip</button>
+          <button id="newBtn" class="good">New round</button>
+        </div>
+
+        <div id="status" class="status">A mystery location has been chosen. Make your first guess.</div>
+
+        <div class="stats">
+          <div class="stat"><b id="guessCount">0</b><span>guesses</span></div>
+          <div class="stat"><b id="hintCount">0</b><span>hints used</span></div>
+          <div class="stat"><b id="regionLabel">NSW</b><span>current pool</span></div>
+        </div>
+      </main>
+
+      <aside class="card">
+        <h2 style="margin-top:0">Hints</h2>
+        <ul id="hints"></ul>
+        <p id="noHints" class="empty">No hints yet.</p>
+
+        <h2>Previous guesses</h2>
+        <div id="guesses"></div>
+        <p id="noGuesses" class="empty">No guesses yet.</p>
+      </aside>
+    </div>
+
+    <footer>Static GitHub Pages version. Session is saved in this browser.</footer>
+  </div>
+
+  <script src="stations.js"></script>
+  <script>
+    const STORAGE_KEY = "station-guesser-state-v2";
+    const HINT_LIMIT = 5;
+    const els = {
+      count: document.getElementById("count"),
+      region: document.getElementById("region"),
+      guess: document.getElementById("guess"),
+      stationList: document.getElementById("station-list"),
+      guessBtn: document.getElementById("guessBtn"),
+      hintBtn: document.getElementById("hintBtn"),
+      skipBtn: document.getElementById("skipBtn"),
+      newBtn: document.getElementById("newBtn"),
+      status: document.getElementById("status"),
+      guessCount: document.getElementById("guessCount"),
+      hintCount: document.getElementById("hintCount"),
+      regionLabel: document.getElementById("regionLabel"),
+      hints: document.getElementById("hints"),
+      noHints: document.getElementById("noHints"),
+      guesses: document.getElementById("guesses"),
+      noGuesses: document.getElementById("noGuesses")
+    };
+
+    const stations = (window.ALL_STATIONS || []).filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lon));
+    let game = loadGame();
+
+    function pool(region = game.region) {
+      return region === "any" ? stations : stations.filter(s => s.state.toLowerCase() === region);
+    }
+
+    function pickStation(region) {
+      const p = pool(region);
+      return p[Math.floor(Math.random() * p.length)];
+    }
+
+    function newGame(region = game?.region || "nsw") {
+      const p = pool(region);
+      const target = p[Math.floor(Math.random() * p.length)];
+      game = { target, guesses: 0, hintsUsed: 0, revealedHints: [], previousGuesses: [], region, solved: false, skipped: false };
+      saveGame();
+      render("A new mystery location has been chosen.");
+    }
+
+    function loadGame() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (saved && saved.target && stations.some(s => sameStation(s, saved.target))) return saved;
+      } catch {}
+      const target = stations[Math.floor(Math.random() * stations.length)];
+      return { target, guesses: 0, hintsUsed: 0, revealedHints: [], previousGuesses: [], region: "nsw", solved: false, skipped: false };
+    }
+
+    function saveGame() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(game));
+    }
+
+    function sameStation(a,b) {
+      return a.name.toLowerCase() === b.name.toLowerCase() && a.state === b.state;
+    }
+
+    function haversineKm(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const aa = Math.sin(dLat/2) ** 2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1-aa));
+    }
+
+    function directionHint(km) {
+      if (km < 1) return "You're very close!";
+      if (km < 10) return "Getting warm!";
+      if (km < 50) return "Not too far.";
+      if (km < 200) return "Quite a distance away.";
+      return "Very far away!";
+    }
+
+    function hintsFor(station) {
+      return [
+        `Network: ${station.state}`,
+        `First letter: ${station.name[0]}`,
+        `Number of letters: ${station.name.replace(/ /g, "").length} (excluding spaces)`,
+        `Transport mode: ${station.mode}`,
+        `Location name starts with: ${station.name.slice(0, 3)}...`
+      ];
+    }
+
+    function parseGuess(raw) {
+      raw = raw.trim();
+      const explicit = raw.match(/^(.*),\s*(nsw|vic)$/i);
+      if (explicit) return { name: explicit[1].trim(), state: explicit[2].toUpperCase() };
+
+      // Datalist labels are like "Central, NSW"
+      const datalist = raw.match(/^(.*),\s*([A-Z]{2,3})$/);
+      if (datalist) return { name: datalist[1].trim(), state: datalist[2].toUpperCase() };
+
+      const candidates = pool(game.region).filter(s => s.name.toLowerCase() === raw.toLowerCase());
+      if (candidates.length === 1) return { name: candidates[0].name, state: candidates[0].state };
+      return { name: raw, state: game.region === "nsw" ? "NSW" : "VIC" };
+    }
+
+    function makeGuess() {
+      if (game.solved || game.skipped) return render("Round already over. Start a new game.");
+      const parsed = parseGuess(els.guess.value);
+      if (!parsed.name || !parsed.state) return render("Type a location name first.");
+
+      const guessStation = stations.find(s => s.name.toLowerCase() === parsed.name.toLowerCase() && s.state === parsed.state);
+      if (!guessStation) return render(`Station/location "${parsed.name}, ${parsed.state}" not found. Check the spelling and network.`, "wrong");
+
+      game.guesses += 1;
+      const correct = sameStation(guessStation, game.target);
+      const km = Math.round(haversineKm(guessStation.lat, guessStation.lon, game.target.lat, game.target.lon) * 10) / 10;
+      const hint = directionHint(km);
+      const result = { station: { name: guessStation.name, state: guessStation.state, mode: guessStation.mode }, distance_km: km, direction_hint: hint, correct };
+      game.previousGuesses.unshift(result);
+      els.guess.value = "";
+
+      if (correct) {
+        game.solved = true;
+        saveGame();
+        return render(`Correct! The answer was ${game.target.name}, ${game.target.state} (${game.target.mode}). You got it in ${game.guesses} guess${game.guesses === 1 ? "" : "es"}.`, "correct");
+      }
+
+      saveGame();
+      render(`${guessStation.name}, ${guessStation.state} (${guessStation.mode}) is ${km} km from the target. ${hint}`, "wrong");
+    }
+
+    function revealHint() {
+      const hints = hintsFor(game.target);
+      if (game.hintsUsed >= HINT_LIMIT) return render("No more hints. Try your best guess.");
+      game.revealedHints.push(hints[game.hintsUsed]);
+      game.hintsUsed += 1;
+      saveGame();
+      render(`Hint ${game.hintsUsed}: ${game.revealedHints.at(-1)}`);
+    }
+
+    function skip() {
+      game.skipped = true;
+      saveGame();
+      render(`Skipped! The answer was ${game.target.name}, ${game.target.state} (${game.target.mode}).`, "wrong");
+    }
+
+    function updateDatalist() {
+      const currentPool = pool(game.region);
+      els.stationList.innerHTML = "";
+      currentPool
+        .slice()
+        .sort((a,b) => a.name.localeCompare(b.name))
+        .forEach(s => {
+          const opt = document.createElement("option");
+          opt.value = `${s.name}, ${s.state}`;
+          els.stationList.appendChild(opt);
+        });
+    }
+
+    function escapeHTML(str) {
+      return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function render(message, kind) {
+      els.count.textContent = stations.length;
+      els.region.value = game.region;
+      els.regionLabel.textContent = game.region === "any" ? "ANY" : game.region.toUpperCase();
+      els.guessCount.textContent = game.guesses;
+      els.hintCount.textContent = game.hintsUsed;
+      els.status.className = `status ${kind || ""}`;
+      els.status.innerHTML = `<strong>${escapeHTML(message || "Make a guess.")}</strong>`;
+
+      els.hints.innerHTML = game.revealedHints.map(h => `<li>${escapeHTML(h)}</li>`).join("");
+      els.noHints.style.display = game.revealedHints.length ? "none" : "block";
+
+      els.guesses.innerHTML = game.previousGuesses.map(g => `
+        <div class="guess">
+          <div><b>${escapeHTML(g.station.name)}, ${escapeHTML(g.station.state)}</b><small>${escapeHTML(g.station.mode)} · ${escapeHTML(g.direction_hint)}</small></div>
+          <div class="km">${g.correct ? "✅" : escapeHTML(g.distance_km + " km")}</div>
+        </div>
+      `).join("");
+      els.noGuesses.style.display = game.previousGuesses.length ? "none" : "block";
+      updateDatalist();
+    }
+
+    els.guessBtn.addEventListener("click", makeGuess);
+    els.guess.addEventListener("keydown", e => { if (e.key === "Enter") makeGuess(); });
+    els.hintBtn.addEventListener("click", revealHint);
+    els.skipBtn.addEventListener("click", skip);
+    els.newBtn.addEventListener("click", () => newGame(els.region.value));
+    els.region.addEventListener("change", () => newGame(els.region.value));
+
+    if (!game.target || !stations.length) {
+      document.body.innerHTML = "<p style='font-family:sans-serif;padding:24px'>No station data loaded. Check stations.js.</p>";
+    } else {
+      if (game.region === "any") game.region = "nsw";
+      render("A mystery NSW location has been chosen. Make your first guess.");
+    }
+  </script>
+</body>
+</html>
